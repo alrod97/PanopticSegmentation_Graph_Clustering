@@ -180,19 +180,34 @@ def run_one_training(params_list):
     print(f"Finishing training with best test loss: {best_loss}")
     return [best_loss]
 
+from mango import scheduler, Tuner
+# %% Hyperparameter search
+print("Running hyperparameter search...")
+
 config = dict()
 config['model_aggregation'] = 'GATConv'
-config['model_out_features'] = 32
-config['model_heads'] = 4
+#config['model_out_features'] = 32
+#config['model_heads'] = 4
 config['model_concat'] = False
 config['model_edge_dim'] = 1
 config['batch_size'] = 1
-config['learning_rate'] = 0.01
-config['sgd_momentum'] = 0.001
-config['weight_decay'] = 0.1
-config['scheduler_gamma'] = 0.1
+#config['learning_rate'] = 0.01
+#config['sgd_momentum'] = 0.001
+#config['weight_decay'] = 0.1
+#config['scheduler_gamma'] = 0.1
+
+
+config = dict()
+config["optimizer"] = "Bayesian"
+config["num_iteration"] = 100
 
 params = []
 params.append(config)
 
-run_one_training(params_list=params)
+tuner = Tuner(HYPERPARAMETERS,
+              objective=run_one_training,
+              conf_dict=config)
+
+results = tuner.minimize()
+print(results)
+#run_one_training(params_list=params)

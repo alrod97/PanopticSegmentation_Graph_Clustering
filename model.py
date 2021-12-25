@@ -34,8 +34,8 @@ class GNN(torch.nn.Module):
             print('Error: No Valid Aggregation Technique')
 
         # Standard Feed forward NN for edge detection on the fully connected graph
-        self.fc1 = nn.Linear(64, 32)
-        self.fc2 = nn.Linear(32, 2)
+        self.fc1 = nn.Linear(self.out_features*2, self.out_features)
+        self.fc2 = nn.Linear(self.out_features, 2)
 
     def forward(self, x, edges, edge_feature):
         #
