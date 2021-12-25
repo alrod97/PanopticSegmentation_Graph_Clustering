@@ -1,4 +1,6 @@
+arm_mango==1.1.0
 hdbscan==0.8.27
+mango==0.1
 mlflow==1.22.0
 numpy==1.21.4
 PyYAML==6.0
