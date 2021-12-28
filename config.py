@@ -3,7 +3,7 @@ from mlflow.models.signature import ModelSignature
 from mlflow.types.schema import Schema, TensorSpec
 
 HYPERPARAMETERS = {
-    "model_aggregation": ["GATConv"],
+    "model_aggregation": ["SAGEConv"],
     "model_edge_dim": [1],
     "batch_size": [1],
     "model_concat": [False],
@@ -11,8 +11,8 @@ HYPERPARAMETERS = {
     "weight_decay": [0.0001, 0.00001, 0.001],
     "sgd_momentum": [0.9, 0.8, 0.5],
     "scheduler_gamma": [0.995, 0.9, 0.8, 0.5, 1],
-    "model_out_features": [8, 16, 32, 64, 128],
-    "model_heads": [1, 2, 3, 4]
+    "model_out_features": [8, 16, 32],
+    "model_normalize": [False]
 }
 
 input_schema = Schema([TensorSpec(np.dtype(np.float32), (-1, 30), name="x"),

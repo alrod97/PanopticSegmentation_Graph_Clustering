@@ -2,7 +2,7 @@ import numpy as np
 import tqdm
 import torch
 from model import GNN
-from dataset import PanopticClusteringDataset
+from dataset import PanopticClusteringDataset, PanopticClusteringDatasetAll
 from torch_geometric.data import DataLoader
 from torch_geometric.utils import to_dense_adj
 #import mlflow.pytorch
@@ -29,37 +29,32 @@ def train_one_epoch(epoch, model, train_loader, optimizer, loss_fn):
         # Reset gradients
         optimizer.zero_grad()
         # Passing the node features and the connection info
-        Adj = torch.ones((batch.x.size()[0], batch.x.size()[0]))
-        row, col = np.where(Adj)
-        coo = np.array(list(zip(row, col)))
-        edges = torch.from_numpy(np.reshape(coo, (2, -1)))
+        n_clusters = batch.x.size()[0]
 
-        pred = model(batch.x , edges, batch.edge_attr[:, None])
+        coo_full_connected = np.zeros((2, n_clusters**2))
+        counter = 0
+        for i in range(n_clusters):
+            for j in range(n_clusters):
+                coo_full_connected[:, counter] = np.asarray([i,j])
+                counter += 1
+
+
+        pred = model(batch.x , torch.Tensor(coo_full_connected).long(), batch.edge_attr[:, None])
         # Calculating the loss and gradients
-        # get ground truth labels edges
-        Adj_gt = torch.reshape(batch.y, (batch.x.size()[0], batch.x.size()[0]))
-
-        labels_gt = torch.zeros(edges.size()[1])
-        # print('--')
-        for index, edge_cur in enumerate(batch.edge_index.T):
-            if Adj_gt[edge_cur[0], edge_cur[1]] == 1:
-                labels_gt[index] = 1
-            else:
-                labels_gt[index] = 0
-
-        loss = loss_fn(torch.squeeze(pred[:, 0]), labels_gt.float())
+        loss = loss_fn(torch.squeeze(pred[:, 0]), batch.y.float())
         loss.backward()
         optimizer.step()
         # Update tracking
         running_loss += loss.item()
         step += 1
 
-        #all_preds.append(np.rint(torch.sigmoid(pred).cpu().detach().numpy()))
+        all_preds.append(np.rint(pred.cpu().detach().numpy()))
         #all_labels.append(batch.y.cpu().detach().numpy())
 
-    #all_preds = np.concatenate(all_preds).ravel()
+    all_preds = np.concatenate(all_preds).ravel()
     #all_labels = np.concatenate(all_labels).ravel()
     #calculate_metrics(all_preds, all_labels, epoch, "train")
+
     return running_loss/step
 
 
@@ -72,38 +67,30 @@ def test(epoch, model, test_loader, loss_fn):
     for batch in test_loader:
         batch.to(device)
         # Passing the node features and the connection info
-        Adj = torch.ones((batch.x.size()[0], batch.x.size()[0]))
-        row, col = np.where(Adj)
-        coo = np.array(list(zip(row, col)))
-        edges = torch.from_numpy(np.reshape(coo, (2, -1)))
+        n_clusters = batch.x.size()[0]
+        coo_full_connected = np.zeros((2, n_clusters ** 2))
+        counter = 0
+        for i in range(n_clusters):
+            for j in range(n_clusters):
+                coo_full_connected[:, counter] = np.asarray([i, j])
+                counter += 1
 
-        pred = model(batch.x, edges, batch.edge_attr[:, None])
+        pred = model(batch.x, torch.Tensor(coo_full_connected).long(), batch.edge_attr[:, None])
         # Calculating the loss and gradients
-        # get ground truth labels edges
-        Adj_gt = torch.reshape(batch.y, (batch.x.size()[0], batch.x.size()[0]))
-
-        labels_gt = torch.zeros(edges.size()[1])
-        # print('--')
-        for index, edge_cur in enumerate(batch.edge_index.T):
-            if Adj_gt[edge_cur[0], edge_cur[1]] == 1:
-                labels_gt[index] = 1
-            else:
-                labels_gt[index] = 0
-
-        loss = loss_fn(torch.squeeze(pred[:, 0]), labels_gt.float())
+        loss = loss_fn(torch.squeeze(pred[:, 0]), batch.y.float())
 
         # Update tracking
         running_loss += loss.item()
         step += 1
         all_preds.append(np.rint(torch.sigmoid(pred).cpu().detach().numpy()))
-        all_preds_raw.append(torch.sigmoid(pred).cpu().detach().numpy())
+        all_preds_raw.append(pred.cpu().detach().numpy())
         all_labels.append(batch.y.cpu().detach().numpy())
 
     all_preds = np.concatenate(all_preds).ravel()
     all_labels = np.concatenate(all_labels).ravel()
-    print(all_preds_raw[0][:10])
-    print(all_preds[:10])
-    print(all_labels[:10])
+    #print(all_preds_raw[0][:10])
+    #print(all_preds[:10])
+    #print(all_labels[:10])
    # calculate_metrics(all_preds, all_labels, epoch, "test")
    # log_conf_matrix(all_preds, all_labels, epoch)
     return running_loss / step
@@ -120,7 +107,7 @@ def run_one_training(params_list):
 
         # Loading the dataset
         print("Loading dataset...")
-        train_dataset = PanopticClusteringDataset(root='graph_data/')
+        train_dataset = PanopticClusteringDatasetAll(root='graph_data/')
         #test_dataset =
         #params["model_edge_dim"] = train_dataset[0].edge_attr.shape[0]
 
@@ -131,7 +118,7 @@ def run_one_training(params_list):
         # Loading the model
         print("Loading model...")
         model_params = {k: v for k, v in params.items() if k.startswith("model_")}
-        model = GNN(in_features=3, model_params=model_params) # dropout and alpha modelparams
+        model = GNN(in_features=4 , model_params=model_params) # dropout and alpha modelparams
         model = model.to(device)
         print(f"Number of parameters: {count_parameters(model)}")
         mlflow.log_param("num_params", count_parameters(model))
@@ -149,7 +136,7 @@ def run_one_training(params_list):
         # Start training
         best_loss = 10000
         early_stopping_counter = 0
-        for epoch in range(50):
+        for epoch in range(100):
             if early_stopping_counter <= 10:  # = x * 5
                 # Training
                 model.train()
@@ -185,21 +172,22 @@ from mango import scheduler, Tuner
 print("Running hyperparameter search...")
 
 config = dict()
-config['model_aggregation'] = 'GATConv'
-#config['model_out_features'] = 32
-#config['model_heads'] = 4
+config['model_aggregation'] = 'SAGEConv'
+config['model_out_features'] = 32
+config['model_heads'] = 4
 config['model_concat'] = False
 config['model_edge_dim'] = 1
+config['model_normalize'] = True
 config['batch_size'] = 1
-#config['learning_rate'] = 0.01
-#config['sgd_momentum'] = 0.001
-#config['weight_decay'] = 0.1
-#config['scheduler_gamma'] = 0.1
+config['learning_rate'] = 0.001
+config['sgd_momentum'] = 0.01
+config['weight_decay'] = 0
+config['scheduler_gamma'] = 0.1
 
 
 config = dict()
 config["optimizer"] = "Bayesian"
-config["num_iteration"] = 100
+config["num_iteration"] = 50
 
 params = []
 params.append(config)
@@ -209,5 +197,5 @@ tuner = Tuner(HYPERPARAMETERS,
               conf_dict=config)
 
 results = tuner.minimize()
-print(results)
-#run_one_training(params_list=params)
+#print(results)
+run_one_training(params_list=params)

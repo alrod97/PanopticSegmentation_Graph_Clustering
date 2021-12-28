@@ -5,7 +5,6 @@ from torch_geometric.nn import GATConv, SAGEConv
 
 ## GRAPH ATTENTION LAYER
 
-
 class GNN(torch.nn.Module):
     def __init__(self, in_features,model_params=None):
         super(GNN, self).__init__()
@@ -34,22 +33,26 @@ class GNN(torch.nn.Module):
             print('Error: No Valid Aggregation Technique')
 
         # Standard Feed forward NN for edge detection on the fully connected graph
-        self.fc1 = nn.Linear(self.out_features*2, self.out_features)
+        self.fc1 = nn.Linear(self.out_features*2 + 1, self.out_features)
         self.fc2 = nn.Linear(self.out_features, 2)
 
     def forward(self, x, edges, edge_feature):
         #
-        x = self.AGG_1(x, edges, edge_feature)
+        if self.aggregation_technique == 'GATConv':
+            x = self.AGG_1(x, edges, edge_feature)
+        elif self.aggregation_technique == 'SAGEConv':
+            x = self.AGG_1(x, edges)
+
         x = self.AGG_2(x, edges)
 
         # construct N^2 x 2D matrix for every edge, for every edge we have the feature vector as described in the paper
         N = x.size()[0]**2
-        D = x.size()[1]*2
+        D = x.size()[1]*2 + 1
 
         x_edges = torch.zeros((N, D))
         for index, edge_cur in enumerate(edges.T):
-            x_edges[index, :] = torch.concat((x[edge_cur[0]] , x[edge_cur][1]))
-
+            edge_feat_tensor = torch.tensor(edge_feature[index])
+            x_edges[index, :] = torch.concat((x[edge_cur[0]] , x[edge_cur][1], edge_feat_tensor))
         ##
 
         # MLP Layers with Relu and softmax to get probanility of every edge being true or not
@@ -57,3 +60,4 @@ class GNN(torch.nn.Module):
         y = F.softmax(self.fc2(x_edges), dim=1)
 
         return y
+
