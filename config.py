@@ -11,7 +11,7 @@ HYPERPARAMETERS = {
     "weight_decay": [0.0001, 0.00001, 0.001],
     "sgd_momentum": [0.9, 0.8, 0.5],
     "scheduler_gamma": [0.995, 0.9, 0.8, 0.5, 1],
-    "model_out_features": [8, 16, 32],
+    "model_out_features": [8, 16],
     "model_normalize": [False]
 }
 
@@ -22,3 +22,4 @@ input_schema = Schema([TensorSpec(np.dtype(np.float32), (-1, 30), name="x"),
 output_schema = Schema([TensorSpec(np.dtype(np.float32), (-1, 1))])
 
 SIGNATURE = ModelSignature(inputs=input_schema, outputs=output_schema)
+

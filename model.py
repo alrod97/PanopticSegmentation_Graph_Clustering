@@ -36,7 +36,7 @@ class GNN(torch.nn.Module):
         self.fc1 = nn.Linear(self.out_features*2 + 1, self.out_features)
         self.fc2 = nn.Linear(self.out_features, 2)
 
-    def forward(self, x, edges, edge_feature):
+    def forward(self, x, edges, edge_feature, batch):
         #
         if self.aggregation_technique == 'GATConv':
             x = self.AGG_1(x, edges, edge_feature)
@@ -46,13 +46,17 @@ class GNN(torch.nn.Module):
         x = self.AGG_2(x, edges)
 
         # construct N^2 x 2D matrix for every edge, for every edge we have the feature vector as described in the paper
-        N = x.size()[0]**2
+        N = 0
+        for batch_cur in torch.unique(batch):
+             N += torch.where(batch == int(batch_cur))[0].size()[0]**2
         D = x.size()[1]*2 + 1
 
         x_edges = torch.zeros((N, D))
+
         for index, edge_cur in enumerate(edges.T):
             edge_feat_tensor = torch.tensor(edge_feature[index])
             x_edges[index, :] = torch.concat((x[edge_cur[0]] , x[edge_cur][1], edge_feat_tensor))
+
         ##
 
         # MLP Layers with Relu and softmax to get probanility of every edge being true or not

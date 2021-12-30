@@ -315,11 +315,12 @@ class PanopticClusteringDatasetAll(Dataset):
 
             # n components using ground truth
             n_components = np.shape(np.unique(instances_class))[0]
-
-            if (n_components + 25) > points_class.shape[0]:
+            print('n components')
+            print(n_components)
+            if (n_components + 20) > points_class.shape[0]:
                 n_clusters = points_class.shape[0]
             else:
-                n_clusters = n_components + 25
+                n_clusters = n_components + 20
 
             # K means Over Clustering
             if self.clustering == 'kmeans':
@@ -328,9 +329,10 @@ class PanopticClusteringDatasetAll(Dataset):
                 km_clusters = km.predict(points_class)
             else:
                 # HBDSCAN CLUSTERING
-                clusterer = hdbscan.HDBSCAN(min_cluster_size=n_components + 15, min_samples=60)
+                clusterer = hdbscan.HDBSCAN(min_cluster_size=n_clusters)
                 clusterer.fit(points_class)
                 km_clusters = clusterer.labels_
+                print(np.unique(km_clusters))
 
             sorted_unique_clusters = np.sort(np.unique(km_clusters))
 
@@ -397,11 +399,10 @@ class PanopticClusteringDatasetAll(Dataset):
             graph = csr_matrix(Adj)
             n_components_graph, labels = connected_components(csgraph=graph, directed=False, return_labels=True)
 
-            # Edges in COO format
-            row, col = np.where(Adj)
-            coo = np.array(list(zip(row, col)))
-            coo = np.reshape(coo, (2, -1))
-
+            # Edges in COO format for fully connected graph
+            Adj_fully_connected = np.ones_like(Adj)
+            row, col = np.where(Adj_fully_connected)
+            coo = np.array(list(zip(row, col))).T
 
             if (n_components - n_components_graph) != 0:
                 #print('MISMATCH')
@@ -409,6 +410,7 @@ class PanopticClusteringDatasetAll(Dataset):
 
             data = Data(x=torch.from_numpy(node_features), edge_index=torch.tensor(coo),
                         y=torch.tensor(Adj.ravel(), dtype=torch.int64), edge_attr=torch.Tensor(edges_attr))
+
 
             edd = data.edge_index
 
