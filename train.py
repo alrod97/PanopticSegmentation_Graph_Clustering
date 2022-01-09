@@ -2,7 +2,7 @@ import numpy as np
 import tqdm
 import torch
 from model import GNN
-from dataset import PanopticClusteringDataset, PanopticClusteringDatasetAll
+from dataset import PanopticClusteringDataset
 from torch_geometric.data import DataLoader
 from torch_geometric.utils import to_dense_adj
 #import mlflow.pytorch
@@ -43,7 +43,6 @@ def train_one_epoch(epoch, model, train_loader, optimizer, loss_fn):
 
         if epoch == 100:
             torch.save(pred, 'graph_data/predictions/pred.pt')
-
 
 
         #all_labels.append(batch.y.cpu().detach().numpy())
@@ -98,7 +97,7 @@ def run_one_training(params_list):
 
         # Loading the dataset
         print("Loading dataset...")
-        train_dataset = PanopticClusteringDatasetAll(root='graph_data/')
+        train_dataset = PanopticClusteringDataset(root='graph_data/')
         #test_dataset =
         #params["model_edge_dim"] = train_dataset[0].edge_attr.shape[0]
 

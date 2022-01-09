@@ -17,10 +17,10 @@ import hdbscan
 from utils import get_instances
 
 # This is the dataloader for our Panoptic Clustering apporach.
-class PanopticClusteringDatasetAll(Dataset):
+class PanopticClusteringDataset(Dataset):
     def __init__(self, root, transform=None, pre_transform=None, clustering='kmeans'):
         self.clustering = clustering
-        super(PanopticClusteringDatasetAll, self).__init__(root, transform, pre_transform)
+        super(PanopticClusteringDataset, self).__init__(root, transform, pre_transform)
 
     @property
     def raw_file_names(self):
@@ -318,7 +318,7 @@ class PanopticClusteringDatasetAll(Dataset):
         return data
 
 
-train_dataset = PanopticClusteringDatasetAll(root='graph_data/')
+train_dataset = PanopticClusteringDataset(root='graph_data/')
 
 #data = torch.load(osp.join('graph_data/processed', 'graph_data_'+str(0)+'_ALL_.pt'))
 
