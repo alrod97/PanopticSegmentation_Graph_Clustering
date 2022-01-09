@@ -16,6 +16,31 @@ from scipy.sparse.csgraph import connected_components
 
 # This is the dataloader for our Panoptic Clustering apporach.
 
+def get_instances(seg_label, inst_label):
+    # unique classes segmentation
+    seg_classes = np.unique(seg_label)
+    # unique instances
+    instances = np.unique(inst_label)
+
+    instances_new_label = np.zeros_like(inst_label)
+
+    inst_counter = 1
+
+    for inst_cur in instances:
+        # corresponding classes
+        if inst_cur == 0:
+            pass
+        else:
+            indexes_inst = np.argwhere(inst_label == inst_cur)
+            seg_class_inst = seg_label[indexes_inst]
+            for seg_class in np.unique(seg_class_inst):
+                indexes_seg = np.argwhere(seg_class_inst == seg_class)
+                instances_new_label[indexes_inst[indexes_seg]] = inst_counter
+                inst_counter += 1
+
+    return instances_new_label
+
+
 class PanopticClusteringDataset(Dataset):
     def __init__(self, root, transform=None, pre_transform=None, radius=None, k =None):
         self.radius = radius
@@ -82,6 +107,9 @@ class PanopticClusteringDataset(Dataset):
             u_label_sem_class = label & 0xFFFF  # remap to xentropy format
             u_label_inst = label >> 16
 
+            # get new inst label
+            u_label_inst_new = get_instances(inst_label=u_label_inst, seg_label=u_label_sem_class)
+            print(np.unique(u_label_inst_new))
             # create graphs
 
             for sem_class in np.unique(u_label_sem_class):
@@ -195,12 +223,12 @@ class PanopticClusteringDataset(Dataset):
         data = torch.load(osp.join(self.processed_dir, 'graph_data_'+str(idx)+'_.pt'))
         return data
 
-#dataset = PanopticClusteringDataset(root='graph_data/', k=33)
+dataset = PanopticClusteringDataset(root='graph_data/', k=33)
 
-radiuses = np.arange(1.8,3,0.1)
-k = np.arange(20,40)
+#radiuses = np.arange(1.8,3,0.1)
+#k = np.arange(20,40)
 #print(radiuses)
-for i in k:
-    print(i)
-    dataset = PanopticClusteringDataset(root='graph_data/', radius=i,k=i)
+#for i in k:
+#    print(i)
+#    dataset = PanopticClusteringDataset(root='graph_data/', radius=i,k=i)
 

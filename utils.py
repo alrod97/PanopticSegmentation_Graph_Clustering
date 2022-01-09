@@ -4,6 +4,30 @@ import torch
 from scipy.sparse import csr_matrix
 import open3d as o3d
 
+def get_instances(seg_label, inst_label):
+    # unique classes segmentation
+    seg_classes = np.unique(seg_label)
+    # unique instances
+    instances = np.unique(inst_label)
+
+    instances_new_label = np.zeros_like(inst_label)
+
+    inst_counter = 1
+
+    for inst_cur in instances:
+        # corresponding classes
+        if inst_cur == 0:
+            pass
+        else:
+            indexes_inst = np.argwhere(inst_label == inst_cur)
+            seg_class_inst = seg_label[indexes_inst]
+            for seg_class in np.unique(seg_class_inst):
+                indexes_seg = np.argwhere(seg_class_inst == seg_class)
+                instances_new_label[indexes_inst[indexes_seg]] = inst_counter
+                inst_counter += 1
+
+    return instances_new_label
+
 def get_clusters(pred, info_path, gt_path):
     # pred is the N^2 x 1 array with 1 if edge and 0 if no edge
 
@@ -19,16 +43,13 @@ def get_clusters(pred, info_path, gt_path):
     N = int(np.sqrt(pred.shape[0]))
 
     Adj_pred = np.reshape(pred, (N, N))
-
     graph = csr_matrix(Adj_pred)
     n_components, labels = connected_components(csgraph=graph, directed=False, return_labels=True)
 
-    print(n_components)
-    print(N)
     for component in range(n_components):
         # get which sub-clusters belong to this cluster
-        corresponding_sub_clusters = np.argwhere(np.asarray(labels) == component)
-        # go over each points of subcluster and assigns them the same isntance id
+        corresponding_sub_clusters = np.argwhere(labels == component)
+        # go over each points of subcluster and assigns them the same instance id
         for id in corresponding_sub_clusters:
             # read indexes to pc
             indexes[info_clusters[id[0]]] = component
@@ -41,12 +62,15 @@ def get_clusters(pred, info_path, gt_path):
     graph_gt = csr_matrix(Adj_gt)
     n_components_gt, labels_gt = connected_components(csgraph=graph_gt, directed=False, return_labels=True)
     indexes_gt = np.zeros(points.shape[0])
+
     for component in range(n_components_gt):
         # get which sub-clusters belong to this cluster
-        corresponding_sub_clusters = np.argwhere(np.asarray(labels_gt) == component)
+        corresponding_sub_clusters = np.argwhere(labels_gt == component)
         # go over each points of subcluster and assigns them the same isntance id
+        print('---')
         for id in corresponding_sub_clusters:
             # read indexes to pc
+            print(info_clusters[id[0]].shape)
             indexes_gt[info_clusters[id[0]]] = component
 
     # overcluster indexes
@@ -82,7 +106,6 @@ def get_overclusters(info_path):
             j += 1
 
     instance_colors = {
-        -1: [180, 30, 80],
         0: [0, 0, 0],
         1: [0, 0, 255],
         2: [245, 150, 100],
@@ -112,8 +135,9 @@ def get_overclusters(info_path):
         26: [90, 30, 150],
         27: [250, 80, 100],
         28: [180, 30, 80],
+        29: [110, 30, 80],
+        30: [180, 90, 80],
     }
-
     color_inst = np.zeros_like(points)
     for instance_cur in np.unique(indexes_overcluster):
         color_cur = instance_colors[instance_cur]
@@ -129,6 +153,7 @@ def get_overclusters(info_path):
     o3d.visualization.draw_geometries([pcd])
 
 
+'''
 pred = torch.load('graph_data/predictions/pred.pt').detach().numpy()
 pred = np.argmax(pred, axis=1)
 
@@ -138,7 +163,7 @@ final_pred[pred == 0] = 1
 #print(final_pred.sum())
 indexes, points, indexes_gt, indexes_overcluster= get_clusters(final_pred, 'graph_data/processed/graph_data_0_ALL_INFO.pt', 'graph_data/processed/graph_data_0_ALL_.pt')
 
-get_overclusters(info_path='graph_data/processed/graph_data_0_ALL_INFO.pt')
+#get_overclusters(info_path='graph_data/processed/graph_data_0_ALL_INFO.pt')
 
 
 color_inst = np.zeros_like(points)
@@ -173,6 +198,8 @@ instance_colors = {
             26: [90, 30, 150],
             27: [250, 80, 100],
             28: [180, 30, 80],
+            29: [110, 30, 80],
+            30: [180, 90, 80],
         }
 i = 0
 
@@ -191,3 +218,4 @@ pcd.colors = o3d.utility.Vector3dVector(color_inst.astype(np.float) / 255.0)
 o3d.visualization.draw_geometries([pcd])
 print(points.shape)
 print(indexes.shape)
+'''
