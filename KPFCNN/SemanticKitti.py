@@ -93,7 +93,7 @@ class SemanticKittiDataset(PointCloudDataset):
             frames = np.sort([vf[:-4] for vf in listdir(velo_path) if vf.endswith('.bin')])
             self.frames.append(frames)
 
-        # xxx
+        # xxxsam
         # self.frames = []
         # self.frames.append(np.array(['000000', '000001', '000002', '000003']))
 
@@ -302,7 +302,7 @@ class SemanticKittiDataset(PointCloudDataset):
             num_merged = 0
             f_inc = 0
             f_inc_points = []
-            self.rand_order = np.empty((0,))  # xxxsam reset before merging multiple frames
+            # self.rand_order = np.empty((0,))  # xxxsam reset before merging multiple frames
             while num_merged < self.config.n_frames and f_ind - f_inc >= 0:
 
                 # Current frame pose
@@ -450,7 +450,7 @@ class SemanticKittiDataset(PointCloudDataset):
 
                 # Shuffle points
                 rand_order = np.random.permutation(mask_inds)
-                self.rand_order = np.concatenate((self.rand_order, rand_order), axis=0)  # xxxsam save order of points
+                # self.rand_order = np.concatenate((self.rand_order, rand_order), axis=0)  # xxxsam save order of points
                 new_points = new_points[rand_order, :3]  # xxxsam no changes made. Some points get dropped here
                 sem_labels = sem_labels[rand_order]
                 ins_labels = ins_labels[rand_order]
@@ -491,16 +491,17 @@ class SemanticKittiDataset(PointCloudDataset):
             #########################
 
             # Subsample merged frames
-            # in_pts, in_fts, in_lbls, in_slbls = grid_subsampling(merged_points,
-            #                                            features=merged_coords,
-            #                                            labels=merged_labels,
-            #                                            ins_labels=merged_ins_labels,
-            #                                            sampleDl=self.config.first_subsampling_dl)
+            in_pts, in_fts, in_lbls, in_slbls = grid_subsampling(merged_points,
+                                                       features=merged_coords,
+                                                       labels=merged_labels,
+                                                       ins_labels=merged_ins_labels,
+                                                       sampleDl=self.config.first_subsampling_dl)
             # xxxsam points get downsampled here. Commented out to not deal with cpp code when finding indicies
-            in_pts, in_fts = merged_points, merged_coords
-            in_lbls, in_slbls = merged_labels, merged_ins_labels
-            in_lbls = in_lbls.reshape((-1, 1))
-            in_slbls = in_slbls.reshape((-1, 1))
+            # in_pts, in_fts = merged_points, merged_coords
+            # in_lbls, in_slbls = merged_labels, merged_ins_labels
+            # in_lbls = in_lbls.reshape((-1, 1))
+            # in_slbls = in_slbls.reshape((-1, 1))
+            self.in_slbls = in_slbls
 
             t += [time.time()]
 
@@ -972,7 +973,6 @@ class SemanticKittiSampler(Sampler):
         Yield next batch indices here. In this dataset, this is a dummy sampler that yield the index of batch element
         (input sphere) in epoch instead of the list of point indices
         """
-        print('yield indicies')  # xxxsam
 
         if self.dataset.balance_classes:
 
