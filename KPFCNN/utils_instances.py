@@ -167,6 +167,143 @@ def ins_pre_2_pass(predicted, centers_output, var_output, embedding, next_ins_id
 
     return ins_prediction
 
+def knn_ins_pred(self, predicted, centers_output, var_output, embedding, prev_instances={}, next_ins_id=1,
+                 points=None, times=None):
+    """A function to predict the instance association for a semantically segmented point-cloud.
+    Args:
+        predicted: The perdicted class of each point                            (torch.int64 vector)
+        centers_output: "Centerness" of each point                              (torch.float32 vector)
+        var_output: The variances of each point                                 (torch.float32 matrix)
+        embedding: An embedding for each point                                  (torch.float32 matrix)
+        prev_instances: ?                                                       (dict)
+        prev_instances["04"]: ?                                                 (dict)
+        next_ins_id: The next ID which an new instace will be assigned          (int)
+        points: x,y,z coordinates of different time steps                       (list)
+        points[0]: The x,y,z coordinates of current time step for each point    (torch.float32 matrix)
+        times: ?                                                                (torch.float32 vector)
+
+    Args example shapes:
+        predicted:              82781
+        centers_output:         torch.Size([82781, 1])
+        var_output:             torch.Size([82781, 260])
+        embedding:              torch.Size([82781, 256])
+        prev_instances:         1
+        prev_instances["04"]:   0
+        next_ins_id:            1
+        points:                 6
+        points[0]:              torch.Size([82781, 3])
+        times:                  82781
+
+    Output:
+        ins_prediction: The predicted instance for each point                               (torch.int64)
+        new_instances: Information about current(?) instaces                                (dict)
+        new_instance["1"]: contains mean, var, life, bbox, bbox_proj, tracker, kalman_bbox  (dict)
+        ins_id: The next ID which an new instace will be assigned                           (int)
+
+    Output example shapes:
+        ins_prediction:     82781
+        new_isntances:      9
+        new_instance["1"]:  7
+        ins_id:             1
+    """
+
+    new_instances = {}
+    ins_prediction = torch.zeros_like(predicted, dtype=torch.int64)
+    ins_id = next_ins_id
+
+    thing_classes = torch.unique(predicted)[torch.unique(predicted) < 9]
+    thing_classes = thing_classes[thing_classes != 0]
+
+    threshold = {'1': 0.9,  # car
+                 '2': 0.8,  # bicycle
+                 '3': 0.8,  # motorcycle
+                 '4': 0.8,  # truck
+                 '5': 0.5,  # other-vehicle
+                 '6': 0.7,  # person
+                 '7': 0.8,  # bicyclist
+                 '8': 0.8}  # motorcyclist
+
+    nbr_clusters = get_nbr_clusters(predicted, centers_output, var_output, embedding, next_ins_id,
+                                    points=points, times=times)
+
+    for selected_class in thing_classes:
+        embeddings_class = embedding[predicted == selected_class, :]
+        points_class = points[0][predicted == selected_class, :]
+        embeddings_class = torch.cat((embeddings_class, points_class), axis=1)  # concatenate xyz to embeddings
+        variances_class = var_output[predicted == selected_class, :]
+        centers_class = centers_output[predicted == selected_class, :]
+
+        # nbr_cluster = 0
+        # range_cluster = range(1, 20)
+        # sum_of_squared_distances = []
+        # if embeddings_class.shape[0] < 5:
+        #     continue
+        # elif embeddings_class.shape[0] < 15:
+        #     nbr_cluster = 1
+        # else:
+        #     for k in range_cluster:
+        #         km = KMeans(n_clusters=k)
+        #         km = km.fit(embeddings_class)
+        #         sum_of_squared_distances.append(km.inertia_)
+        #         nbr_cluster = k
+        #         if k == 1:
+        #             pass
+        #         elif (sum_of_squared_distances[k-1]/sum_of_squared_distances[k-2]) > threshold[str(selected_class.item())]:
+        #             break
+
+        km = KMeans(n_clusters=nbr_clusters[str(selected_class.item())])
+        km = km.fit(embeddings_class)
+        ins_prediction_class = km.predict(embeddings_class) + ins_id
+        ins_id += nbr_clusters[str(selected_class.item())]
+
+        ins_colors = np.zeros_like(points_class)
+        ins_colors = color_instances(ins_colors, ins_prediction_class)
+        display_instances(points_class, ins_colors)
+
+        # ids = (predicted == selected_class).nonzero(as_tuple=True)
+        indicies = torch.where(predicted == selected_class)
+        ins_prediction[indicies] = torch.from_numpy(ins_prediction_class).type(torch.int64)
+
+    nbr_points_of_instance = torch.bincount(ins_prediction)
+    for i in torch.unique(ins_prediction):
+        ids = torch.where(ins_prediction == i)
+        if nbr_points_of_instance[i] > 25:  # add to instance history
+            mean = torch.mean(embedding[ids], 0, True)
+            bbox, kalman_bbox = get_bbox_from_points(points[0][ids])
+            tracker = KalmanBoxTracker(kalman_bbox, i)
+            bbox_proj = None
+            var = torch.mean(var_output[ids], 0, True)
+            new_instances[i] = {'mean': mean, 'var': var, 'life': 5, 'bbox': bbox, 'bbox_proj': bbox_proj,
+                                'tracker': tracker, 'kalman_bbox': kalman_bbox}
+
+    # associate instances by hungarian alg. & bbox prediction via kalman filter
+    if len(prev_instances.keys()) > 0:
+
+        # association_costs, associations = self.associate_instances(config, prev_instances, new_instances, pose)
+        associations = []
+        for prev_id, new_id in associations:
+            ins_points = torch.where((ins_prediction == new_id))
+            ins_prediction[ins_points[0]] = prev_id
+            prev_instances[prev_id]['mean'] = new_instances[new_id]['mean']
+            prev_instances[prev_id]['bbox_proj'] = new_instances[new_id]['bbox_proj']
+
+            prev_instances[prev_id]['life'] += 1
+            prev_instances[prev_id]['tracker'].update(new_instances[new_id]['kalman_bbox'], prev_id)
+            prev_instances[prev_id]['kalman_bbox'] = prev_instances[prev_id]['tracker'].get_state()
+            prev_instances[prev_id]['bbox'] = kalman_box_to_eight_point(prev_instances[prev_id]['kalman_bbox'])
+
+            del new_instances[new_id]
+
+    # should be
+    # ins_preds.shape = 82781
+    # ins_preds.dtype = torch.int64
+    # type(new_instaces) = dict
+    # len(new_instaces) = 9
+    # type(new_instaces["1"]) = dict   # containing mean, var, life, bbox, bbox_proj, tracker, kalman_bbox
+    # type(ins_id) = int
+
+    return ins_prediction, new_instances, ins_id
+
 
 def get_nbr_clusters(predicted, centers_output, var_output, embedding, next_ins_id, points=None, times=None):
     """
